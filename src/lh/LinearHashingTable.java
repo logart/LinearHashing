@@ -29,7 +29,7 @@ public class LinearHashingTable {
 
 
   public LinearHashingTable() {
-    CHAIN_NUMBER = 2;
+    CHAIN_NUMBER = 1;
     size = 0;
     level = 0;
     next = 0;
@@ -46,14 +46,13 @@ public class LinearHashingTable {
     }
 
     file.set(0, new Bucket());
-    file.set(1, new Bucket());
 
     primaryIndex.addNewPosition();
-    primaryIndex.addNewPosition();
+
   }
 
   public boolean put(long key) {
-    int hash = HashCalculator.calculateHash(key, level);
+    int hash = calculateHash(key);
 
     final boolean result = tryInsertIntoChain(hash, key);
     if (result) {
@@ -64,18 +63,18 @@ public class LinearHashingTable {
     return result;
   }
 
-//  private int calculateHash(long key) {
-//    int hash = (int) (key % ((int) (CHAIN_NUMBER * (Math.pow(2, level)))));
-//    if (hash < next || (hash == next && isSplitting)) {
-//      hash = calculateNextHash(key);
-//    }
-//    return hash;
-//  }
+  private int calculateHash(long key) {
+    int internalHash = HashCalculator.calculateInternalHash(key, level);
+    if (internalHash < next || (internalHash == next && isSplitting)) {
+      return HashCalculator.calculateBucketNumber(internalHash, level + 1);
+    } else {
+      return HashCalculator.calculateBucketNumber(internalHash, level);
+    }
+  }
 
-//  private int calculateNextHash(long key) {
-//    return (int) (key % ((int) (CHAIN_NUMBER * (Math.pow(2, level + 1)))));
-//  }
-
+  private int calculateNextHash(long key) {
+    return HashCalculator.calculateHash(key, level + 1);
+  }
 
   private boolean tryInsertIntoChain(final int chainNumber, long key) {
     int chainDisplacement = primaryIndex.getChainDisplacement(chainNumber);
@@ -97,6 +96,7 @@ public class LinearHashingTable {
         return result;
       } else if (keySignature == chainSignature) {
         recordPool.add(key);
+        size--;
         moveLargestRecordToRecordPool(chainNumber, (byte) chainSignature);
         Bucket bucket = file.get(chainNumber);
 
@@ -137,6 +137,7 @@ public class LinearHashingTable {
           return result;
         } else if (keySignature == chainSignature) {
           recordPool.add(key);
+          size--;
           moveLargestRecordToRecordPool(pageToStore, (byte) chainSignature);
           Bucket bucket = file.get(pageToStore);
 
@@ -160,9 +161,10 @@ public class LinearHashingTable {
     //calculate load factor
     double capacity = ((double) size) / (primaryIndex.bucketCount() * Bucket.BUCKET_MAX_SIZE);
     if (capacity > maxCapacity) {
+      int chainNumber = HashCalculator.calculateInternalHash(next, level);
       //TODO make this durable by inventing cool record pool
-      loadChainInPool(next);
-      int pageToStore = (int) (next + CHAIN_NUMBER * Math.pow(2, level));
+      loadChainInPool(chainNumber);
+      int pageToStore = chainNumber + (int) Math.pow(2, level);
       int groupSize = calculateGroupSize(level + 1);
       boolean needMove = false;
       for (int i = pageToStore; i < pageToStore + groupSize; ++i){
@@ -180,7 +182,7 @@ public class LinearHashingTable {
 //                System.out.println(groupOverflowTable);
       }
 
-      primaryIndex.addNewPosition();
+      primaryIndex.addNewPosition(next + (int) Math.pow(2, level));
       file.set(pageToStore, new Bucket());
       groupOverflowTable.moveDummyGroupIfNeeded(pageToStore, groupSize);
 
@@ -228,7 +230,7 @@ public class LinearHashingTable {
       Long key = chainPool.get(0);
       chainPool.remove(key);
 
-      int hash = HashCalculator.calculateHash(key, level + 1);
+      int hash = calculateNextHash(key);
 
       final boolean result = tryInsertIntoChain(hash, key);
       if (result) {
@@ -313,6 +315,7 @@ public class LinearHashingTable {
     Bucket bucket = file.get(chainNumber);
     List<Long> largestRecords = bucket.getLargestRecords(signature);
     recordPool.addAll(largestRecords);
+    size -= largestRecords.size();
   }
 
   private int findNextPageInChain(int chainNumber, int chainDisplacement) {
@@ -398,7 +401,7 @@ public class LinearHashingTable {
 
     int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(page);
     int displacement = secondaryIndex.incrementChainDisplacement(realPosInSecondaryIndex, bucket.size);
-    if (bucket.size == Bucket.BUCKET_MAX_SIZE && displacement != 253) {
+    if (bucket.size == Bucket.BUCKET_MAX_SIZE && displacement > 253) {
       throw new RuntimeException("this can't be true");
     }
     if (displacement <= 253) {
@@ -413,11 +416,10 @@ public class LinearHashingTable {
 
     if ((chainNumber < next || isSplitting) || chainNumber >= (CHAIN_NUMBER * Math.pow(2, level))) {
       currentLevel = level + 1;
-      groupSize = calculateGroupSize(currentLevel);
     } else {
       currentLevel = level;
-      groupSize = calculateGroupSize(currentLevel);
     }
+    groupSize = calculateGroupSize(currentLevel);
 
     int x = (int) (CHAIN_NUMBER * Math.pow(2, currentLevel) + chainNumber - 1);
     int y = x / groupSize;
@@ -441,7 +443,7 @@ public class LinearHashingTable {
   }
 
   public boolean contains(long key) {
-    final int hash = HashCalculator.calculateHash(key, level);
+    final int hash = calculateHash(key);
 
     int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
     int signature = primaryIndex.getChainSignature(hash);
@@ -470,7 +472,7 @@ public class LinearHashingTable {
   }
 
   public boolean delete(long key) {
-    final int hash = HashCalculator.calculateHash(key, level);
+    final int hash = calculateHash(key);
 
     int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
     int signature = primaryIndex.getChainSignature(hash);

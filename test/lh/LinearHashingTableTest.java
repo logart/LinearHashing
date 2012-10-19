@@ -38,7 +38,7 @@ public class LinearHashingTableTest {
     LinearHashingTable linearHashingTable = new LinearHashingTable();
 
     List<Long> keys = new ArrayList<Long>();
-    Random random = new Random();
+    Random random = new Random(1);
 
     while (keys.size() < KEYS_COUNT) {
       long key = random.nextLong();
