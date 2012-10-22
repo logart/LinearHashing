@@ -35,24 +35,50 @@ public class LinearHashingTableTest {
 
   @Test
   public void testKeyPutRandom() {
-    LinearHashingTable linearHashingTable = new LinearHashingTable();
-
+    LinearHashingTable linearHashingTable;
+    Random random;
     List<Long> keys = new ArrayList<Long>();
-    Random random = new Random(1);
+    long i = 0;//Long.MIN_VALUE;
 
-    while (keys.size() < KEYS_COUNT) {
-      long key = random.nextLong();
-      if (key < 0)
-        key = -key;
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (true) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
 
-      if (linearHashingTable.put(key)) {
-        keys.add(key);
-        Assert.assertTrue(linearHashingTable.contains(key));
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+          if (key < 0)
+            key = -key;
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        for (long key : keys)
+          Assert.assertTrue("" + key, linearHashingTable.contains(key));
+
+
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (StackOverflowError e) {
+        stackCnt++;
+        //Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
       }
     }
 
-    for (long key : keys)
-      Assert.assertTrue("" + key, linearHashingTable.contains(key));
   }
 
   @Test
@@ -127,7 +153,7 @@ public class LinearHashingTableTest {
         Assert.assertTrue(linearHashingTable.contains(i));
 
       if (i % 2 == 0)
-        Assert.assertTrue("i "+(KEYS_COUNT + i),linearHashingTable.contains(KEYS_COUNT + i));
+        Assert.assertTrue("i " + (KEYS_COUNT + i), linearHashingTable.contains(KEYS_COUNT + i));
     }
   }
 

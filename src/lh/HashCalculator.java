@@ -30,7 +30,7 @@ public class HashCalculator {
       return 0;
 
     if ((hash % 2 == 0) && (level > 0))
-      return calculateBucketNumber(level - 1, hash / 2);
+      return calculateBucketNumber( hash / 2, level - 1);
     else
       result = (hash - 1) / 2 + (int) Math.pow(2, level - 1);
 
