@@ -26,7 +26,7 @@ public class HashCalculatorTest {
 
 
     for (long i = 0; i < N; ++i){
-      int hash = HashCalculator.calculateHash(i, 2);
+      int hash = HashCalculator.calculateNaturalOrderedHash(i, 2);
 //      System.out.println(hash + " " + HashCalculator.calculateHashIn01Range(i, -1));
       counter[hash]++;
     }
@@ -45,7 +45,7 @@ public class HashCalculatorTest {
     }
 
     for (int i = 0; i < N; ++i){
-      int hash = HashCalculator.calculateHash(array.get(i), 2);
+      int hash = HashCalculator.calculateNaturalOrderedHash(array.get(i), 2);
 //      System.out.println(hash + " " + HashCalculator.calculateHashIn01Range(array.get(i), -1));
       counter[hash]++;
     }

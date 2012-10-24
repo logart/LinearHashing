@@ -15,11 +15,7 @@ public class HashCalculator {
     return result;
   }
 
-  public static int calculateHash(long key, int level) {
-    return calculateBucketNumber(calculateInternalHash(key, level), level);
-  }
-
-  public static int calculateInternalHash(long key, int level) {
+  public static int calculateNaturalOrderedHash(long key, int level) {
     return (int) Math.floor(Math.pow(2, level) * calculateHashIn01Range(key, level));
   }
 
