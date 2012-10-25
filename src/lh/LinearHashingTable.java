@@ -26,6 +26,7 @@ public class LinearHashingTable {
   private List<Long> chainPool = new ArrayList<Long>(100);
   private int size;
   private boolean isSplitting;
+  private static final int MAX_GROUP_SIZE = 128;
 
 
   public LinearHashingTable() {
@@ -52,6 +53,9 @@ public class LinearHashingTable {
   }
 
   public boolean put(long key) {
+    if (contains(key)){
+      return false;
+    }
     int bucketNumber = calculateHash(key);
 
     final boolean result = tryInsertIntoChain(bucketNumber, key);
@@ -183,6 +187,7 @@ public class LinearHashingTable {
       int pageToStore = next + (int) Math.pow(2, level);
       int groupSize = calculateGroupSize(level + 1);
       boolean needMove = false;
+      //TODO use group size from group overflow to prevent collisions
       for (int i = pageToStore; i < pageToStore + groupSize; ++i){
         if (pageIndicator.get(i)) {
           needMove = true;
@@ -268,22 +273,26 @@ public class LinearHashingTable {
       int groupSize = groupOverflowTable.getSizeForGroup(groupOverflowInfo.group);
       int newPage = groupOverflowTable.move(groupOverflowInfo.group, groupSize);
 
-      for (int i = oldPage; i < oldPage + groupSize; ++i){
-        if (pageIndicator.get(i)) {
-          Bucket bucket = file.get(i);
-          file.set(i - oldPage + newPage, bucket);
+      moveGroupToNewPosition(oldPage, newPage, groupSize);
+
+    }
+  }
+
+  private void moveGroupToNewPosition(int oldPage, int newPage, int groupSize) {
+    for (int i = oldPage; i < oldPage + groupSize; ++i){
+      if (pageIndicator.get(i)) {
+        Bucket bucket = file.get(i);
+        file.set(i - oldPage + newPage, bucket);
 //                    System.out.println("null page " + i + " but size is " + primaryIndex.bucketCount());
-          file.set(i, null);
-          //move resords in secondary index
-          int oldPositionInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(i);
-          pageIndicator.set(i - oldPage + newPage);
-          pageIndicator.unset(i);
-          int newPositionInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(i - oldPage + newPage);
+        file.set(i, null);
+        //move resords in secondary index
+        int oldPositionInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(i);
+        pageIndicator.set(i - oldPage + newPage);
+        pageIndicator.unset(i);
+        int newPositionInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(i - oldPage + newPage);
 
-          secondaryIndex.moveRecord(oldPositionInSecondaryIndex, newPositionInSecondaryIndex);
-        }
+        secondaryIndex.moveRecord(oldPositionInSecondaryIndex, newPositionInSecondaryIndex);
       }
-
     }
   }
 
@@ -356,19 +365,29 @@ public class LinearHashingTable {
 
     int pageToUse = pageIndicator.getFirstEmptyPage(pos[0], pos[1]);
 
+    int actualStartingPage = pos[0];
+
     if (pageToUse == -1) {
-      throw new GroupOverflowException(
-          "There is no empty page for group size " + groupSize + " because pages " + pageIndicator.toString() + " are already allocated." +
-              "Starting page is " + pos[0]
-      );
+      if (pos[1] == MAX_GROUP_SIZE) {
+        throw new GroupOverflowException(
+            "There is no empty page for group size " + groupSize + " because pages " + pageIndicator.toString() + " are already allocated." +
+                "Starting page is " + pos[0]
+        );
+      } else {
+        groupSize = pos[1] * 2;
+        int newStartingPage = groupOverflowTable.enlargeGroupSize(groupNumber, groupSize);
+        moveGroupToNewPosition(pos[0], newStartingPage, pos[1]);
+        pageToUse = pageIndicator.getFirstEmptyPage(newStartingPage, groupSize);
+        actualStartingPage = newStartingPage;
+      }
     }
 
     if (mainChain) {
 //            System.out.println((pageToUse - pos[0]) + " but " + (byte) (pageToUse - pos[0]));
-      primaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - pos[0]));
+      primaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - actualStartingPage));
     } else {
 //      System.out.println((pageToUse - pos[0]) + " but " + (byte) (pageToUse - pos[0]));
-      secondaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - pos[0]));
+      secondaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - actualStartingPage));
     }
 
     //TODO right order in secondary index

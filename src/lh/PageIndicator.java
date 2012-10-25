@@ -14,7 +14,7 @@ public class PageIndicator {
 
   public int getRealPosInSecondaryIndex(int page) {
     if (page < 0) {
-      throw new RuntimeException("reality is strange");
+      throw new RuntimeException("page number in page indicator should be positive");
     }
     int index = 0;
     for (int i = 0; i < page; ++i){

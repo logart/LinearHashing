@@ -12,9 +12,9 @@ import org.junit.Test;
  */
 public class HashCalculatorTest {
 
-  public static final int N = 100000;
+  public static final int N = 10000000;
   private Random random = new Random();
-  private long[] counter = new long[4];
+  private long[] counter = new long[10];
 
   @Test
   public void testCalculateHash() throws Exception {
@@ -48,6 +48,20 @@ public class HashCalculatorTest {
       int hash = HashCalculator.calculateNaturalOrderedHash(array.get(i), 2);
 //      System.out.println(hash + " " + HashCalculator.calculateHashIn01Range(array.get(i), -1));
       counter[hash]++;
+    }
+    System.out.println("new!");
+    for (long aCounter : counter){
+      System.out.println(aCounter);
+    }
+
+    for (int i1 = 0, counterLength = counter.length; i1 < counterLength; i1++){
+      counter[i1] = 0;
+    }
+
+    for (int i = 0; i < N; ++i){
+//      double hash = HashCalculator.calculateHashIn01Range(array.get(i), 2);
+//      System.out.println(hash + " " + HashCalculator.calculateHashIn01Range(array.get(i), -1));
+//      counter[(int)Math.floor(hash*10)]++;
     }
     System.out.println("new!");
     for (long aCounter : counter){

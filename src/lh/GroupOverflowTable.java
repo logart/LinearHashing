@@ -61,24 +61,36 @@ public class GroupOverflowTable {
   }
 
   public GroupOverflowInfo findDummyGroup() {
-//    System.out.println("findDummyGroup");
-    for (GroupOverflowInfo groupOverflowInfo : overflowInfo){
-      if (groupOverflowInfo.group == DUMMY_GROUP_NUMBER) {
-//        System.out.println(this.toString());
-        return groupOverflowInfo;
-      }
-    }
-
-//    System.out.println(this.toString());
-    return null;
+    return findDummyGroup(0);
   }
 
   public int move(byte groupNumber, int groupSize) {
     removeGroup(groupNumber);
-    GroupOverflowInfo dummyGroup = findDummyGroup();
+    GroupOverflowInfo dummyGroup = findDummyGroup(groupSize);
     dummyGroup.group = groupNumber;
     createDummyGroupIfNeeded(groupSize);
     return dummyGroup.startingPage;
+  }
+
+  private GroupOverflowInfo findDummyGroup(int minGroupSize) {
+    //    System.out.println("findDummyGroup");
+    for (int i = 0, overflowInfoSize = overflowInfo.size() - 1; i < overflowInfoSize; i++){
+      if (
+          (overflowInfo.get(i).group == DUMMY_GROUP_NUMBER) &&
+              ((overflowInfo.get(i + 1).startingPage - overflowInfo.get(i).startingPage) >= minGroupSize)
+          ) {
+//        System.out.println(this.toString());
+        return overflowInfo.get(i);
+      }
+    }
+
+    if (overflowInfo.get(overflowInfo.size() - 1).group == DUMMY_GROUP_NUMBER) {
+//      assert overflowInfo.get(0).group == DUMMY_GROUP_NUMBER;
+      return overflowInfo.get(overflowInfo.size() - 1);
+    }
+//    System.out.println(this.toString());
+    return null;
+
   }
 
   private void removeGroup(byte groupNumber) {
@@ -92,6 +104,9 @@ public class GroupOverflowTable {
 
   private void createDummyGroupIfNeeded(int groupSize) {
     if (findDummyGroup() == null) {
+      createDummyGroup(groupSize);
+    }
+    if (overflowInfo.get(overflowInfo.size()-1).group != DUMMY_GROUP_NUMBER) {
       createDummyGroup(groupSize);
     }
   }
@@ -178,20 +193,35 @@ public class GroupOverflowTable {
   public boolean isSecondDummyGroupExists() {
     int counter = 0;
     for (GroupOverflowInfo groupOverflowInfo : overflowInfo){
-      if(groupOverflowInfo.group == DUMMY_GROUP_NUMBER){
-        counter ++;
+      if (groupOverflowInfo.group == DUMMY_GROUP_NUMBER) {
+        counter++;
       }
     }
-    return  counter > 1;
+    return counter > 1;
   }
 
   public int getSizeForGroup(byte groupNumber) {
-    for (int i = 0, overflowInfoSize = overflowInfo.size()-1; i < overflowInfoSize; i++){
+    for (int i = 0, overflowInfoSize = overflowInfo.size() - 1; i < overflowInfoSize; i++){
       GroupOverflowInfo groupOverflowInfo = overflowInfo.get(i);
       if (groupOverflowInfo.group == groupNumber) {
-        return overflowInfo.get(i+1).startingPage - groupOverflowInfo.startingPage;
+        return overflowInfo.get(i + 1).startingPage - groupOverflowInfo.startingPage;
       }
     }
     return -1;
+  }
+
+  public int enlargeGroupSize(final byte groupNumber, final int newGroupSize) {
+    for (GroupOverflowInfo groupOverflowInfo : overflowInfo){
+      if (groupNumber == groupOverflowInfo.group) {
+        groupOverflowInfo.group = DUMMY_GROUP_NUMBER;
+        break;
+      }
+    }
+    assert overflowInfo.get(overflowInfo.size() - 1).group == DUMMY_GROUP_NUMBER;
+    int newStartingPage = overflowInfo.get(overflowInfo.size() - 1).startingPage;
+    overflowInfo.set(overflowInfo.size() - 1, new GroupOverflowInfo(groupNumber, newStartingPage));
+    overflowInfo.add(new GroupOverflowInfo(DUMMY_GROUP_NUMBER, newStartingPage + newGroupSize));
+
+    return newStartingPage;
   }
 }
