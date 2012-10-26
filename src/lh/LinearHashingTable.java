@@ -53,7 +53,7 @@ public class LinearHashingTable {
   }
 
   public boolean put(long key) {
-    if (contains(key)){
+    if (contains(key)) {
       return false;
     }
     int bucketNumber = calculateHash(key);
@@ -168,7 +168,7 @@ public class LinearHashingTable {
         } else {
           if (chainDisplacement == 253) {
             //allocate new page
-            return allocateNewPageAndStore(bucketNumber, realPosInSecondaryIndex, key, false);
+            return allocateNewPageAndStore(bucketNumber, pageToStore, key, false);
           } else {
             pageToStore = findNextPageInChain(bucketNumber, HashCalculator.calculateNaturalOrderedHash(key, level), chainDisplacement);
           }
@@ -356,7 +356,7 @@ public class LinearHashingTable {
     return startingPage + chainDisplacement;
   }
 
-  private boolean allocateNewPageAndStore(int bucketNumber, int positionInIndex, long key, boolean mainChain) {
+  private boolean allocateNewPageAndStore(int bucketNumber, int pageToStore, long key, boolean mainChain) {
     //todo review this level very carefully
     int groupSize = calculateGroupSize(level);
     byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(HashCalculator.calculateNaturalOrderedHash(key, level)));
@@ -382,15 +382,16 @@ public class LinearHashingTable {
       }
     }
 
+    //update displacement of existing index element
     if (mainChain) {
 //            System.out.println((pageToUse - pos[0]) + " but " + (byte) (pageToUse - pos[0]));
-      primaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - actualStartingPage));
+      primaryIndex.updateDisplacement(pageToStore, (byte) (pageToUse - actualStartingPage));
     } else {
 //      System.out.println((pageToUse - pos[0]) + " but " + (byte) (pageToUse - pos[0]));
-      secondaryIndex.updateDisplacement(positionInIndex, (byte) (pageToUse - actualStartingPage));
+      int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(actualStartingPage + pageToStore - pos[0]);
+      secondaryIndex.updateDisplacement(realPosInSecondaryIndex, (byte) (pageToUse - actualStartingPage));
     }
 
-    //TODO right order in secondary index
     pageIndicator.set(pageToUse);
     int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
     secondaryIndex.addNewPosition(realPosInSecondaryIndex);
@@ -401,11 +402,6 @@ public class LinearHashingTable {
     return storeRecordInOverflowBucket(pageToUse, key);
   }
 
-  private int calculateActualLevel(int keyHash) {
-    return ((keyHash < next || isSplitting) || keyHash >= (CHAIN_NUMBER * Math.pow(2, level))) ? level + 1 : level;
-  }
-
-  //TODO fix this
   private boolean storeRecordInMainBucket(final int bucketNumber, long key) {
 
     Bucket bucket = file.get(bucketNumber);
