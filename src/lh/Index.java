@@ -64,6 +64,10 @@ public class Index {
     indexContent.get(chainNumber).signature = (byte) signature;
   }
 
+  public void updateSignature(int bucketNumber, int signature) {
+    indexContent.get(bucketNumber).signature = (byte) signature;
+  }
+
   public void updateDisplacement(int chainNumber, byte displacement) {
     indexContent.get(chainNumber).displacement = displacement;
   }

@@ -220,32 +220,33 @@ public class LinearHashingTable {
     }
   }
 
-//  private void mergeBucketIfNeeded() {
-//    //calculate load factor
-//    double capacity = ((double) size) / (primaryIndex.bucketCount() * Bucket.BUCKET_MAX_SIZE);
-//    System.out.println("merge " + capacity);
-//    if (capacity < minCapacity) {
-//      System.out.println("in");
-//      //TODO make this durable by inventing cool record pool
-//      int chainNumber = primaryIndex.bucketCount() - 1;
-//      loadChainInPool(chainNumber);
-//      primaryIndex.remove(chainNumber);
-//      //todo remove secondary index info
-//
-//      //todo remove pageIndicator info
-//      file.set(chainNumber, null);
-//
-//      isSplitting = true;
-//      storeRecordFromChainPool();
-//      isSplitting = false;
-//
-//      next--;
-//      if (next < 0) {
-//        level--;
-//        next = (int) (CHAIN_NUMBER * Math.pow(2, level) - 1);
-//      }
-//    }
-//  }
+  private void mergeBucketIfNeeded() {
+    //calculate load factor
+    double capacity = ((double) size) / (primaryIndex.bucketCount() * Bucket.BUCKET_MAX_SIZE);
+    if (capacity < minCapacity) {
+      System.out.println("in");
+      //TODO make this durable by inventing cool record pool
+      int naturalOrderKey = primaryIndex.bucketCount() - 1;
+      int bucketNumberToMerge = HashCalculator.calculateBucketNumber(next, level);
+
+      loadChainInPool(bucketNumberToMerge, naturalOrderKey);
+      primaryIndex.remove(bucketNumberToMerge);
+      //todo remove secondary index info
+
+      //todo remove pageIndicator info
+      file.set(bucketNumberToMerge, null);
+
+      isSplitting = true;
+      storeRecordFromChainPool();
+      isSplitting = false;
+
+      next--;
+      if (next < 0) {
+        level--;
+        next = (int) (CHAIN_NUMBER * Math.pow(2, level) - 1);
+      }
+    }
+  }
 
   private void storeRecordFromChainPool() {
     while (!chainPool.isEmpty()) {
@@ -505,90 +506,120 @@ public class LinearHashingTable {
     }
   }
 
-//  public boolean delete(long key) {
-//    final int hash = calculateHash(key);
-//
-//    int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
-//    int signature = primaryIndex.getChainSignature(hash);
-//    int pageNumberToUse = hash;
-//
-//    int chainDisplacement = primaryIndex.getChainDisplacement(hash);
-//    byte groupNumber = calculateGroupNumber(hash);
-//    int pageNumber = groupOverflowTable.getPageForGroup(groupNumber);
-//
-//    while (true) {
-//      if (keySignature > signature) {
-//        if (chainDisplacement >= 253) {
-//          return false;
-//        } else {
-//          pageNumberToUse = pageNumber + chainDisplacement;
-//          int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
-//          signature = secondaryIndex.getChainSignature(realPosInSecondaryIndex);
-//          chainDisplacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
-//        }
-//      } else {
-//        Bucket bucket = file.get(pageNumberToUse);
-//        final Bucket originalBucket = bucket;
-//        int position = bucket.deleteKey(key);
-//        if (position >= 0) {
-//          //move record from successor to current bucket
-//          int prevPage = pageNumberToUse;
-//          while (chainDisplacement < 253) {
-//            prevPage = pageNumberToUse;
-//            pageNumberToUse = pageNumber + chainDisplacement;
-//            int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
-//            chainDisplacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
-//            Bucket secondBucket = file.get(pageNumberToUse);
-//            List<Long> smallestRecords = secondBucket.getSmallestRecords(Bucket.BUCKET_MAX_SIZE - bucket.size);
-//            if (smallestRecords.isEmpty()) {
-//              //do nothing!
-//            } else {
-//              //move this records to predecessor
-//              bucket.add(smallestRecords);
-//
-//              for (Long smallestRecord : smallestRecords){
-//                if (secondBucket.deleteKey(smallestRecord) < 0) {
-//                  throw new IllegalStateException("error while deleting record to move it to predecessor bucket");
-//                }
-//              }
-//
-//              secondaryIndex.updateSignature(realPosInSecondaryIndex, secondBucket.keys, secondBucket.size);
-//              bucket = secondBucket;
-//            }
-//          }
-//
-//          primaryIndex.updateSignature(hash, originalBucket.keys, originalBucket.size);
-//
-//          if (pageNumberToUse == hash) {
-//            //main bucket does not have overflow chain
-//            primaryIndex.decrementDisplacement(hash, bucket.size);
-//          } else {
-//            int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
-//            if (bucket.size == 0) {
-//              secondaryIndex.remove(realPosInSecondaryIndex);
-//              pageIndicator.unset(pageNumberToUse);
-//              //set prev bucket in chain correct displacement
-//              if (prevPage == hash) {
-//                primaryIndex.decrementDisplacement(hash, file.get(hash).size, true);
-//              } else {
-//                secondaryIndex.decrementDisplacement(
-//                    pageIndicator.getRealPosInSecondaryIndex(prevPage),
-//                    file.get(prevPage).size,
-//                    true
-//                );
-//              }
-//            } else {
-//              secondaryIndex.decrementDisplacement(realPosInSecondaryIndex, bucket.size);
-//            }
-//          }
-//        } else {
-//          //return false because nothing was found
-//          return false;
-//        }
-//        size--;
+  public boolean delete(long key) {
+    final int bucketNumber = calculateHash(key);
+
+    int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
+    int signature = primaryIndex.getChainSignature(bucketNumber);
+    int pageNumberToUse = bucketNumber;
+
+    int chainDisplacement = primaryIndex.getChainDisplacement(bucketNumber);
+    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(HashCalculator.calculateNaturalOrderedHash(key, level)));
+    int pageNumber = groupOverflowTable.getPageForGroup(groupNumber);
+
+    int prevPage = bucketNumber;
+    while (true) {
+      if (keySignature > signature) {
+        if (chainDisplacement >= 253) {
+          return false;
+        } else {
+          prevPage = pageNumberToUse;
+          pageNumberToUse = pageNumber + chainDisplacement;
+          int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
+          signature = secondaryIndex.getChainSignature(realPosInSecondaryIndex);
+          chainDisplacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
+        }
+      } else {
+        Bucket bucket = file.get(pageNumberToUse);
+        int position = bucket.deleteKey(key);
+        if (position >= 0) {
+          //move record from successor to current bucket
+          while (chainDisplacement < 253) {
+            prevPage = pageNumberToUse;
+            pageNumberToUse = pageNumber + chainDisplacement;
+            int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
+            chainDisplacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
+            Bucket secondBucket = file.get(pageNumberToUse);
+            List<Long> smallestRecords = secondBucket.getSmallestRecords(Bucket.BUCKET_MAX_SIZE - bucket.size);
+            if (smallestRecords.isEmpty()) {
+              //do nothing!
+            } else {
+              //move this records to predecessor
+              bucket.add(smallestRecords);
+
+              for (Long smallestRecord : smallestRecords){
+                if (secondBucket.deleteKey(smallestRecord) < 0) {
+                  throw new IllegalStateException("error while deleting record to move it to predecessor bucket");
+                }
+              }
+            }
+
+            //update signatures after removing some records from buckets
+            if (prevPage == bucketNumber) {
+              if (primaryIndex.getChainDisplacement(bucketNumber) > 253) {
+                primaryIndex.updateSignature(bucketNumber, 255);
+              } else {
+                primaryIndex.updateSignature(bucketNumber, bucket.keys, bucket.size);
+              }
+            } else {
+              int indexPosition = pageIndicator.getRealPosInSecondaryIndex(prevPage);
+              if (primaryIndex.getChainDisplacement(bucketNumber) > 253) {
+                secondaryIndex.updateSignature(indexPosition, 255);
+              } else {
+                secondaryIndex.updateSignature(indexPosition, bucket.keys, bucket.size);
+              }
+            }
+            bucket = secondBucket;
+          }
+
+          //update displacement and signature in last bucket
+          if (pageNumberToUse == bucketNumber) {
+            //main bucket does not have overflow chain
+            int displacement = primaryIndex.decrementDisplacement(bucketNumber, bucket.size);
+            if (displacement <= 253) {
+              primaryIndex.updateSignature(bucketNumber, bucket.keys, bucket.size);
+            } else {
+              primaryIndex.updateSignature(bucketNumber, 255);
+            }
+          } else {
+            int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
+            if (bucket.size == 0) {
+              secondaryIndex.remove(realPosInSecondaryIndex);
+              pageIndicator.unset(pageNumberToUse);
+              //set prev bucket in chain correct displacement
+              if (prevPage == bucketNumber) {
+                int displacement = primaryIndex.decrementDisplacement(bucketNumber, file.get(bucketNumber).size, true);
+                if (displacement > 253) {
+                  primaryIndex.updateSignature(bucketNumber, 255);
+                }
+              } else {
+                int prevIndexPosition = pageIndicator.getRealPosInSecondaryIndex(prevPage);
+                int displacement = secondaryIndex.decrementDisplacement(
+                    prevIndexPosition,
+                    file.get(prevPage).size,
+                    true
+                );
+                if (displacement > 253) {
+                  secondaryIndex.updateSignature(prevIndexPosition, 255);
+                }
+              }
+            } else {
+              int displacement = secondaryIndex.decrementDisplacement(realPosInSecondaryIndex, bucket.size);
+              if (displacement <= 253) {
+                secondaryIndex.updateSignature(realPosInSecondaryIndex, bucket.keys, bucket.size);
+              } else {
+                secondaryIndex.updateSignature(realPosInSecondaryIndex, 255);
+              }
+            }
+          }
+        } else {
+          //return false because nothing was found
+          return false;
+        }
+        size--;
 //        mergeBucketIfNeeded();
-//        return true;
-//      }
-//    }
-//  }
+        return true;
+      }
+    }
+  }
 }
