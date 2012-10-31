@@ -8,6 +8,4 @@ package lh;
 public class IndexElement {
     byte signature = (byte) 255;
     byte displacement = (byte) 255;
-
-
 }

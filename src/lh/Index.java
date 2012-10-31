@@ -20,7 +20,6 @@ public class Index {
   }
 
   public int getChainDisplacement(int numberOfChain) {
-//    System.out.println("chain " + numberOfChain + " size " + indexContent.size());
     return indexContent.get(numberOfChain).displacement & 0xFF;
   }
 
@@ -64,6 +63,10 @@ public class Index {
     indexContent.get(chainNumber).signature = (byte) signature;
   }
 
+  public void updateSignature(int bucketNumber, int signature) {
+    indexContent.get(bucketNumber).signature = (byte) signature;
+  }
+
   public void updateDisplacement(int chainNumber, byte displacement) {
     indexContent.get(chainNumber).displacement = displacement;
   }
@@ -83,11 +86,9 @@ public class Index {
   }
 
   public void moveRecord(int oldPositionInIndex, int newPositionInIndex) {
-//    System.out.print("index size " + indexContent.size());
     IndexElement indexElement = indexContent.get(oldPositionInIndex);
     indexContent.remove(indexElement);
     indexContent.add(newPositionInIndex, indexElement);
-//    System.out.println(" index size after move " + indexContent.size());
   }
 
   @Override

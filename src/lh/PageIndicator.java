@@ -14,7 +14,10 @@ public class PageIndicator {
 
   public int getRealPosInSecondaryIndex(int page) {
     if (page < 0) {
-      throw new RuntimeException("reality is strange");
+      throw new RuntimeException("page number in page indicator should be positive");
+    }
+    if (!indicator.get(page)) {
+      throw new RuntimeException("page which will be removed should be used before");
     }
     int index = 0;
     for (int i = 0; i < page; ++i){
@@ -39,7 +42,6 @@ public class PageIndicator {
   }
 
   public void unset(int pageToUse) {
-//    System.out.println("page " + pageToUse +" now unset");
     assert indicator.get(pageToUse);
     indicator.set(pageToUse, false);
   }
