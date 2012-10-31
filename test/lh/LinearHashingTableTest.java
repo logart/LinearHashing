@@ -15,8 +15,9 @@ import org.junit.Test;
  */
 public class LinearHashingTableTest {
   private static final int KEYS_COUNT = 100000;
+    public static final int MAX_SEED = 100;
 
-  @Test
+    @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
   public void testKeyPut() {
     LinearHashingTable linearHashingTable = new LinearHashingTable();
@@ -44,7 +45,7 @@ public class LinearHashingTableTest {
 
     int stackCnt = 0;
     int groupCnt = 0;
-    while (i < 100) {
+    while (i < MAX_SEED) {
       try {
         linearHashingTable = new LinearHashingTable();
         random = new Random(i);
@@ -186,7 +187,7 @@ public class LinearHashingTableTest {
     LinearHashingTable linearHashingTable;
     int seed = 0;
     int out = 0;
-    while (true) {
+    while (seed<MAX_SEED) {
       try {
         linearHashingTable = new LinearHashingTable();
         List<Long> longs = getUniqueRandomValuesArray(seed, 2 * KEYS_COUNT);

@@ -23,9 +23,9 @@ public class LinearHashingTable {
   private List<Bucket> file;
   private PageIndicator pageIndicator;
   private List<Long> recordPool = new ArrayList<Long>(100);
-  private List<Long> chainPool = new ArrayList<Long>(100);
+  //  private List<Long> chainPool = new ArrayList<Long>(100);
   private int size;
-  private boolean isSplitting;
+  //  private boolean isSplitting;
   private static final int MAX_GROUP_SIZE = 128;
 
 
@@ -35,7 +35,7 @@ public class LinearHashingTable {
     level = 0;
     next = 0;
     maxCapacity = 0.8;
-    minCapacity = 0.4;
+    minCapacity = 0.7;
     primaryIndex = new Index();
     secondaryIndex = new Index();
     groupOverflowTable = new GroupOverflowTable();
@@ -68,7 +68,7 @@ public class LinearHashingTable {
   }
 
   private int currentLevel(int naturalOrderedKey) {
-    if (naturalOrderedKey < next || (naturalOrderedKey == next && isSplitting)) {
+    if (naturalOrderedKey < next) {
       return level + 1;
     } else {
       return level;
@@ -79,7 +79,7 @@ public class LinearHashingTable {
     int internalHash = HashCalculator.calculateNaturalOrderedHash(key, level);
 
     final int bucketNumber;
-    if (internalHash < next || (internalHash == next && isSplitting)) {
+    if (internalHash < next) {
       bucketNumber = calculateNextHash(key);
     } else {
       bucketNumber = HashCalculator.calculateBucketNumber(internalHash, level);
@@ -208,15 +208,17 @@ public class LinearHashingTable {
       file.set(pageToStore, new Bucket());
       groupOverflowTable.moveDummyGroupIfNeeded(pageToStore, groupSize);
 
-      isSplitting = true;
-      storeRecordFromChainPool();
-      isSplitting = false;
-
       next++;
+
       if (next == (CHAIN_NUMBER * Math.pow(2, level))) {
         next = 0;
         level++;
       }
+//      isSplitting = true;
+      storeRecordFromRecordPool();
+//      isSplitting = false;
+
+
     }
   }
 
@@ -226,45 +228,66 @@ public class LinearHashingTable {
     if (capacity < minCapacity) {
       System.out.println("in");
       //TODO make this durable by inventing cool record pool
-      int naturalOrderKey = primaryIndex.bucketCount() - 1;
-      int bucketNumberToMerge = HashCalculator.calculateBucketNumber(next, level);
+      final int naturalOrderKey1;
+      final int naturalOrderKey2;
+      final int bucketNumberToMerge1;
+      final int bucketNumberToMerge2;
+      if (next == 0) {
+        naturalOrderKey1 = (int) (CHAIN_NUMBER * Math.pow(2, level ))-2;
+        naturalOrderKey2 = naturalOrderKey1 + 1;
+        bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level);
+        bucketNumberToMerge2 = (int) Math.pow(2, level) - 1;
+      } else {
+        naturalOrderKey1 = next - 1;
+        naturalOrderKey2 = naturalOrderKey1 + 1;
+        bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level+1);
+//        assert bucketNumberToMerge1 == HashCalculator.calculateBucketNumber(naturalOrderKey1 / 2, level);
+        bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
+        assert HashCalculator.calculateBucketNumber(2*naturalOrderKey2-1, level + 1) == next - 1 + (int) Math.pow(2, level);
+      }
+      loadChainInPool(bucketNumberToMerge1, naturalOrderKey1);
+      loadChainInPool(bucketNumberToMerge2, naturalOrderKey2);
 
-      loadChainInPool(bucketNumberToMerge, naturalOrderKey);
-      primaryIndex.remove(bucketNumberToMerge);
-      //todo remove secondary index info
+//      int displacement = primaryIndex.getChainDisplacement(bucketNumberToMerge);
+//      while (displacement < 253) {
+//        int pageToUse = findNextPageInChain(bucketNumberToMerge, naturalOrderKey, displacement);
+//        int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
+//        displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
+//        secondaryIndex.remove(realPosInSecondaryIndex);
+//        pageIndicator.unset(pageToUse);
+//      }
 
-      //todo remove pageIndicator info
-      file.set(bucketNumberToMerge, null);
-
-      isSplitting = true;
-      storeRecordFromChainPool();
-      isSplitting = false;
+      primaryIndex.remove(bucketNumberToMerge2);
+      file.set(bucketNumberToMerge2, null);
 
       next--;
+
       if (next < 0) {
         level--;
         next = (int) (CHAIN_NUMBER * Math.pow(2, level) - 1);
       }
+
+      storeRecordFromRecordPool();
     }
   }
 
-  private void storeRecordFromChainPool() {
-    while (!chainPool.isEmpty()) {
-      Long key = chainPool.get(0);
-      chainPool.remove(key);
-
-      int bucketNumber = calculateNextHash(key);
-
-      assert bucketNumber == HashCalculator.calculateBucketNumber(next, level) || bucketNumber == next + Math.pow(2, level);
-
-      final boolean result = tryInsertIntoChain(bucketNumber, key);
-      if (result) {
-        size++;
-      } else {
-        throw new RuntimeException("error while saving records from pool");
-      }
-    }
-  }
+//  private void storeRecordFromChainPool() {
+//    while (!chainPool.isEmpty()) {
+//      Long key = chainPool.get(0);
+//      chainPool.remove(key);
+//
+//      int bucketNumber = calculateNextHash(key);
+//
+//      assert bucketNumber == HashCalculator.calculateBucketNumber(next, level) || bucketNumber == next + Math.pow(2, level);
+//
+//      final boolean result = tryInsertIntoChain(bucketNumber, key);
+//      if (result) {
+//        size++;
+//      } else {
+//        throw new RuntimeException("error while saving records from pool");
+//      }
+//    }
+//  }
 
   private void moveOverflowGroupToNewPosition(int page) {
     List<GroupOverflowInfo> groupsToMove = groupOverflowTable.getOverflowGroupsInfoToMove(page);
@@ -300,7 +323,7 @@ public class LinearHashingTable {
   private void loadChainInPool(final int bucketNumber, final int naturalOrderedKey) {
     Collection<? extends Long> content = file.get(bucketNumber).getContent();
     size -= content.size();
-    chainPool.addAll(content);
+    recordPool.addAll(content);
     file.get(bucketNumber).emptyBucket();
 
     int displacement = primaryIndex.getChainDisplacement(bucketNumber);
@@ -311,7 +334,7 @@ public class LinearHashingTable {
 
       content = file.get(pageToUse).getContent();
       size -= content.size();
-      chainPool.addAll(content);
+      recordPool.addAll(content);
       file.get(pageToUse).emptyBucket();
 
 
@@ -617,7 +640,7 @@ public class LinearHashingTable {
           return false;
         }
         size--;
-//        mergeBucketIfNeeded();
+        mergeBucketIfNeeded();
         return true;
       }
     }
