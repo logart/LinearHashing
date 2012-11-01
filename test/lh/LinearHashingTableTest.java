@@ -15,9 +15,9 @@ import org.junit.Test;
  */
 public class LinearHashingTableTest {
   private static final int KEYS_COUNT = 100000;
-    public static final int MAX_SEED = 100;
+  public static final int MAX_SEED = 100;
 
-    @Test
+  @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
   public void testKeyPut() {
     LinearHashingTable linearHashingTable = new LinearHashingTable();
@@ -107,32 +107,41 @@ public class LinearHashingTableTest {
 
   @Test
   public void testKeyDeleteRandom() {
-    LinearHashingTable linearHashingTable = new LinearHashingTable();
-    HashSet<Long> longs = new HashSet<Long>();
-    final Random random = new Random(0);
+    int seed = 0;
+    while (seed < MAX_SEED) {
+      try {
 
-    for (int i = 0; i < KEYS_COUNT; i++){
-      long key = random.nextLong();
+        LinearHashingTable linearHashingTable = new LinearHashingTable();
+        HashSet<Long> longs = new HashSet<Long>();
+        final Random random = new Random(0);
+
+        for (int i = 0; i < KEYS_COUNT; i++){
+          long key = random.nextLong();
 //      if (key < 0)
 //        key = -key;
 
 
-      if (linearHashingTable.put(key)) {
-        longs.add(key);
-      }
-    }
+          if (linearHashingTable.put(key)) {
+            longs.add(key);
+          }
+        }
 
-    for (long key : longs){
-      if (key % 3 == 0) {
-        Assert.assertTrue("key = " + key, linearHashingTable.delete(key));
-      }
-    }
+        for (long key : longs){
+          if (key % 3 == 0) {
+            Assert.assertTrue("key = " + key, linearHashingTable.delete(key));
+          }
+        }
 
-    for (long key : longs){
-      if (key % 3 == 0)
-        Assert.assertFalse(linearHashingTable.contains(key));
-      else
-        Assert.assertTrue(linearHashingTable.contains(key));
+        for (long key : longs){
+          if (key % 3 == 0)
+            Assert.assertFalse(linearHashingTable.contains(key));
+          else
+            Assert.assertTrue(linearHashingTable.contains(key));
+        }
+      } finally {
+        seed++;
+        System.out.println(seed + "/" + seed + " = " + (100.0 * seed) / seed + "%");
+      }
     }
   }
 
@@ -187,7 +196,7 @@ public class LinearHashingTableTest {
     LinearHashingTable linearHashingTable;
     int seed = 0;
     int out = 0;
-    while (seed<MAX_SEED) {
+    while (seed < MAX_SEED) {
       try {
         linearHashingTable = new LinearHashingTable();
         List<Long> longs = getUniqueRandomValuesArray(seed, 2 * KEYS_COUNT);
@@ -207,7 +216,7 @@ public class LinearHashingTableTest {
 
           if (i % 2 == 0) {
             Assert.assertTrue(linearHashingTable.put(longs.get(i + KEYS_COUNT)));
-            Assert.assertTrue("i = " +i, linearHashingTable.contains(longs.get(KEYS_COUNT + i)));
+            Assert.assertTrue("i = " + i, linearHashingTable.contains(longs.get(KEYS_COUNT + i)));
           }
         }
 
@@ -225,7 +234,7 @@ public class LinearHashingTableTest {
         out++;
       } finally {
         seed++;
-        System.out.println(out + "/" + seed + " = " + (100.0*out)/seed + "%");
+        System.out.println(out + "/" + seed + " = " + (100.0 * out) / seed + "%");
       }
     }
   }
