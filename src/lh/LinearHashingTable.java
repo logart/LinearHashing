@@ -1,14 +1,18 @@
 package lh;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
+
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 /**
  * @author Andrey Lomakin
  * @since 23.07.12
  */
-public class LinearHashingTable {
+public class LinearHashingTable implements Iterable<Long> {
 
   private static final int FILE_SIZE = 4096;
 
@@ -214,16 +218,16 @@ public class LinearHashingTable {
       final int bucketNumberToMerge1;
       final int bucketNumberToMerge2;
       if (next == 0) {
-        naturalOrderKey1 = (int) (CHAIN_NUMBER * Math.pow(2, level ))-2;
+        naturalOrderKey1 = (int) (CHAIN_NUMBER * Math.pow(2, level)) - 2;
         naturalOrderKey2 = naturalOrderKey1 + 1;
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level);
         bucketNumberToMerge2 = (int) Math.pow(2, level) - 1;
       } else {
         naturalOrderKey1 = next - 1;
         naturalOrderKey2 = naturalOrderKey1 + 1;
-        bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level+1);
+        bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level + 1);
         bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
-        assert HashCalculator.calculateBucketNumber(2*naturalOrderKey2-1, level + 1) == next - 1 + (int) Math.pow(2, level);
+        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
       }
       loadChainInPool(bucketNumberToMerge1, naturalOrderKey1);
       loadChainInPool(bucketNumberToMerge2, naturalOrderKey2);
@@ -596,6 +600,95 @@ public class LinearHashingTable {
         mergeBucketIfNeeded();
         return true;
       }
+    }
+  }
+
+  public Iterator<Long> iterator() {
+    return new RecordIterator();
+  }
+
+  private class RecordIterator implements Iterator<Long> {
+    int positionInCurrentBucket = 0;
+    int naturalOrderedKeyToProcess = 0;
+    boolean nextProcessed = false;
+    private int displacement = 255;
+    private int pageToUse = 0;
+    long[] currentKeys = getNextKeySet();
+
+    private long[] getNextKeySet() {
+      List<Bucket> chain = new ArrayList<Bucket>();
+      final int bucketNumber;
+      if (naturalOrderedKeyToProcess < 2 * next && !nextProcessed) {
+        bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level + 1);
+
+      } else {
+        bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level);
+      }
+
+      pageToUse = bucketNumber;
+      displacement = primaryIndex.getChainDisplacement(bucketNumber);
+
+      //load buckets from overflow positions
+      while (displacement < 253) {
+        int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
+        pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
+        int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
+        displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
+        Bucket bucket = file.get(pageToUse);
+        chain.add(bucket);
+      }
+
+      Bucket bucket = file.get(bucketNumber);
+      chain.add(bucket);
+
+      final long[] result;
+      if (chain.size() == 1) {
+        result = new long[chain.get(0).size];
+        System.arraycopy(chain.get(0).keys,0,result,0,chain.get(0).size);
+      } else {
+
+        int amountOfRecords = 0;
+        for (Bucket chainElement : chain){
+          amountOfRecords += chainElement.size;
+        }
+
+        result = new long[amountOfRecords];
+        int freePositionInArrayPointer = 0;
+        for (Bucket chainElement : chain){
+          System.arraycopy(chainElement.keys, 0, result, freePositionInArrayPointer, chainElement.size);
+          freePositionInArrayPointer += chainElement.size;
+        }
+      }
+
+      naturalOrderedKeyToProcess++;
+
+      if (naturalOrderedKeyToProcess == 2 * next) {
+        nextProcessed = true;
+        naturalOrderedKeyToProcess = next;
+      }
+
+      Arrays.sort(result, 0, result.length);
+
+      return result;
+    }
+
+
+    public boolean hasNext() {
+      //TODO check index to understand is there elements in next buckets
+      return positionInCurrentBucket < currentKeys.length || naturalOrderedKeyToProcess < Math.pow(2, level) || !nextProcessed;
+    }
+
+    public Long next() {
+      if (positionInCurrentBucket >= currentKeys.length) {
+        currentKeys = getNextKeySet();
+        positionInCurrentBucket = 0;
+      }
+      positionInCurrentBucket++;
+      return currentKeys[positionInCurrentBucket - 1];
+    }
+
+    public void remove() {
+      throw new NotImplementedException();
     }
   }
 }

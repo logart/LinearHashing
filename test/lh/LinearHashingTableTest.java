@@ -1,7 +1,9 @@
 package lh;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
 
@@ -15,7 +17,7 @@ import org.junit.Test;
  */
 public class LinearHashingTableTest {
   private static final int KEYS_COUNT = 100000;
-  public static final int MAX_SEED = 100;
+  public static final int MAX_SEED = 1000;
 
   @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
@@ -86,7 +88,7 @@ public class LinearHashingTableTest {
 
   @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
-  public void testKeyDelete() throws InterruptedException {
+  public void testKeyDelete() {
     LinearHashingTable linearHashingTable = new LinearHashingTable();
 
     for (int i = 0; i < KEYS_COUNT; i++)
@@ -113,7 +115,7 @@ public class LinearHashingTableTest {
 
         LinearHashingTable linearHashingTable = new LinearHashingTable();
         HashSet<Long> longs = new HashSet<Long>();
-        final Random random = new Random(0);
+        final Random random = new Random(seed);
 
         for (int i = 0; i < KEYS_COUNT; i++){
           long key = random.nextLong();
@@ -239,9 +241,63 @@ public class LinearHashingTableTest {
     }
   }
 
+  @Test
+  public void testNextHaveRightOrder() throws Exception {
+    LinearHashingTable linearHashingTable;
+    Random random;
+    List<Long> keys = new ArrayList<Long>();
+    long i = 0;//Long.MIN_VALUE;
+
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (i < MAX_SEED) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
+
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+//          if (key < 0)
+//            key = -key;
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        Collections.sort(keys);
+
+
+        Iterator<Long> iterator = linearHashingTable.iterator();
+        for (Long key : keys){
+          Assert.assertTrue("" + key, iterator.hasNext());
+          Long lhKey = iterator.next();
+          Assert.assertEquals("" + key, key, lhKey);
+        }
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (StackOverflowError e) {
+        stackCnt++;
+        //Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
+      }
+    }
+
+  }
+
   private void swap(long[] data, int firstIndex, int secondIndex) {
     long tmp = data[firstIndex];
     data[firstIndex] = data[secondIndex];
     data[secondIndex] = tmp;
   }
+
 }
