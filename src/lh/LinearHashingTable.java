@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
@@ -607,6 +608,14 @@ public class LinearHashingTable implements Iterable<Long> {
     return new RecordIterator();
   }
 
+  public Iterator<Long> negativeIterator() {
+    return new RecordIterator(0);
+  }
+
+  public Iterator<Long> positiveIterator() {
+    return new RecordIterator(0, Long.MAX_VALUE);
+  }
+
   private class RecordIterator implements Iterator<Long> {
     int positionInCurrentBucket = 0;
     int naturalOrderedKeyToProcess = 0;
@@ -614,6 +623,21 @@ public class LinearHashingTable implements Iterable<Long> {
     private int displacement = 255;
     private int pageToUse = 0;
     long[] currentKeys = getNextKeySet();
+    private final long maxValueToIterate;
+    private final long minValueFromIterate;
+
+    private RecordIterator() {
+      this(Long.MIN_VALUE, Long.MAX_VALUE);
+    }
+
+    public RecordIterator(long maxValueToIterate) {
+      this(Long.MIN_VALUE, maxValueToIterate);
+    }
+
+    public RecordIterator(long minValueFromIterate, long maxValueToIterate) {
+      this.minValueFromIterate = minValueFromIterate;
+      this.maxValueToIterate = maxValueToIterate;
+    }
 
     private long[] getNextKeySet() {
       List<Bucket> chain = new ArrayList<Bucket>();
@@ -644,7 +668,7 @@ public class LinearHashingTable implements Iterable<Long> {
       final long[] result;
       if (chain.size() == 1) {
         result = new long[chain.get(0).size];
-        System.arraycopy(chain.get(0).keys,0,result,0,chain.get(0).size);
+        System.arraycopy(chain.get(0).keys, 0, result, 0, chain.get(0).size);
       } else {
 
         int amountOfRecords = 0;
@@ -675,15 +699,34 @@ public class LinearHashingTable implements Iterable<Long> {
 
     public boolean hasNext() {
       //TODO check index to understand is there elements in next buckets
-      return positionInCurrentBucket < currentKeys.length || naturalOrderedKeyToProcess < Math.pow(2, level) || !nextProcessed;
+      loadNextKeyPortionIfNeeded();
+      return ((positionInCurrentBucket < currentKeys.length) || (naturalOrderedKeyToProcess < Math.pow(2, level) || !nextProcessed)) && (currentKeys[positionInCurrentBucket] < maxValueToIterate);
     }
 
-    public Long next() {
+    private void loadNextKeyPortionIfNeeded() {
       if (positionInCurrentBucket >= currentKeys.length) {
         currentKeys = getNextKeySet();
         positionInCurrentBucket = 0;
       }
+    }
+
+    public Long next() {
+      loadNextKeyPortionIfNeeded();
+
+      while (currentKeys[positionInCurrentBucket] < minValueFromIterate) {
+        if (positionInCurrentBucket < currentKeys.length - 1) {
+          positionInCurrentBucket++;
+        } else {
+          currentKeys = getNextKeySet();
+          positionInCurrentBucket = 0;
+        }
+      }
+
       positionInCurrentBucket++;
+
+      if (currentKeys[positionInCurrentBucket - 1] > maxValueToIterate) {
+        throw new NoSuchElementException();
+      }
       return currentKeys[positionInCurrentBucket - 1];
     }
 

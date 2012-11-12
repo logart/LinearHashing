@@ -276,6 +276,26 @@ public class LinearHashingTableTest {
           Long lhKey = iterator.next();
           Assert.assertEquals("" + key, key, lhKey);
         }
+
+        iterator = linearHashingTable.positiveIterator();
+        for (Long key : keys){
+          if (key < 0)
+            continue;
+          Assert.assertTrue("" + key, iterator.hasNext());
+          Long lhKey = iterator.next();
+          Assert.assertEquals("" + key, key, lhKey);
+        }
+
+        iterator = linearHashingTable.negativeIterator();
+        for (Long key : keys){
+          if (key >= 0) {
+            Assert.assertFalse("" + key, iterator.hasNext());
+          } else {
+            Assert.assertTrue("" + key, iterator.hasNext());
+            Long lhKey = iterator.next();
+            Assert.assertEquals("" + key, key, lhKey);
+          }
+        }
       } catch (GroupOverflowException e) {
         groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
       } catch (StackOverflowError e) {
