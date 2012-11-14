@@ -70,7 +70,7 @@ public class LinearHashingTable implements Iterable<Long> {
   }
 
   private int currentLevel(int naturalOrderedKey) {
-    if (naturalOrderedKey < next) {
+    if (naturalOrderedKey < next || naturalOrderedKey > Math.pow(2, level)) {
       return level + 1;
     } else {
       return level;
@@ -224,11 +224,11 @@ public class LinearHashingTable implements Iterable<Long> {
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level);
         bucketNumberToMerge2 = (int) Math.pow(2, level) - 1;
       } else {
-        naturalOrderKey1 = next - 1;
+        naturalOrderKey1 = 2 * (next - 1);
         naturalOrderKey2 = naturalOrderKey1 + 1;
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level + 1);
         bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
-        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
+//        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
       }
       loadChainInPool(bucketNumberToMerge1, naturalOrderKey1);
       loadChainInPool(bucketNumberToMerge2, naturalOrderKey2);

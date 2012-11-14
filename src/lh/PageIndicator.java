@@ -17,7 +17,7 @@ public class PageIndicator {
       throw new RuntimeException("page number in page indicator should be positive");
     }
     if (!indicator.get(page)) {
-      throw new RuntimeException("page which will be removed should be used before");
+      throw new RuntimeException("page which acessed should be used before");
     }
     int index = 0;
     for (int i = 0; i < page; ++i){
