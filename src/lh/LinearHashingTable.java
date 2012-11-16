@@ -624,7 +624,6 @@ public class LinearHashingTable implements Iterable<Long> {
     private int pageToUse = 0;
     long[] currentKeys;
     private final long maxValueToIterate;
-    private final long minValueFromIterate;
 
     private RecordIterator() {
       this(Long.MIN_VALUE, Long.MAX_VALUE);
@@ -635,7 +634,6 @@ public class LinearHashingTable implements Iterable<Long> {
     }
 
     public RecordIterator(long minValueFromIterate, long maxValueToIterate) {
-      this.minValueFromIterate = minValueFromIterate;
       this.maxValueToIterate = maxValueToIterate;
       naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level);
       if (naturalOrderedKeyToProcess < next) {
