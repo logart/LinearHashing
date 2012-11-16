@@ -622,7 +622,7 @@ public class LinearHashingTable implements Iterable<Long> {
     boolean nextProcessed = false;
     private int displacement = 255;
     private int pageToUse = 0;
-    long[] currentKeys = getNextKeySet();
+    long[] currentKeys;
     private final long maxValueToIterate;
     private final long minValueFromIterate;
 
@@ -637,6 +637,11 @@ public class LinearHashingTable implements Iterable<Long> {
     public RecordIterator(long minValueFromIterate, long maxValueToIterate) {
       this.minValueFromIterate = minValueFromIterate;
       this.maxValueToIterate = maxValueToIterate;
+      naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level);
+      if (naturalOrderedKeyToProcess < next) {
+        naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level + 1);
+      }
+      currentKeys = getNextKeySet();
     }
 
     private long[] getNextKeySet() {
@@ -644,7 +649,6 @@ public class LinearHashingTable implements Iterable<Long> {
       final int bucketNumber;
       if (naturalOrderedKeyToProcess < 2 * next && !nextProcessed) {
         bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level + 1);
-
       } else {
         bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level);
       }
@@ -712,15 +716,6 @@ public class LinearHashingTable implements Iterable<Long> {
 
     public Long next() {
       loadNextKeyPortionIfNeeded();
-
-      while (currentKeys[positionInCurrentBucket] < minValueFromIterate) {
-        if (positionInCurrentBucket < currentKeys.length - 1) {
-          positionInCurrentBucket++;
-        } else {
-          currentKeys = getNextKeySet();
-          positionInCurrentBucket = 0;
-        }
-      }
 
       positionInCurrentBucket++;
 

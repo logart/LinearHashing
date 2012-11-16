@@ -17,7 +17,7 @@ import org.junit.Test;
  */
 public class LinearHashingTableTest {
   private static final int KEYS_COUNT = 100000;
-  public static final int MAX_SEED = 1000;
+  public static final int MAX_SEED = 100;
 
   @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
