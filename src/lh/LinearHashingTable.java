@@ -616,6 +616,10 @@ public class LinearHashingTable implements Iterable<Long> {
     return new RecordIterator(0, Long.MAX_VALUE);
   }
 
+  public Iterator<Long> rangeIterator(Long startValue) {
+    return new RecordIterator(startValue, Long.MAX_VALUE);
+  }
+
   private class RecordIterator implements Iterator<Long> {
     int positionInCurrentBucket = 0;
     int naturalOrderedKeyToProcess = 0;
@@ -638,8 +642,13 @@ public class LinearHashingTable implements Iterable<Long> {
       naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level);
       if (naturalOrderedKeyToProcess < next) {
         naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level + 1);
+      } else{
+        nextProcessed = true;
       }
       currentKeys = getNextKeySet();
+      while(currentKeys[positionInCurrentBucket]<minValueFromIterate){
+        positionInCurrentBucket++;
+      }
     }
 
     private long[] getNextKeySet() {
@@ -688,7 +697,7 @@ public class LinearHashingTable implements Iterable<Long> {
 
       naturalOrderedKeyToProcess++;
 
-      if (naturalOrderedKeyToProcess == 2 * next) {
+      if (naturalOrderedKeyToProcess >= 2 * next) {
         nextProcessed = true;
         naturalOrderedKeyToProcess = next;
       }

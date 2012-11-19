@@ -311,7 +311,59 @@ public class LinearHashingTableTest {
         );
       }
     }
+  }
 
+  @Test
+  public void testNextSkipsRecordValid() throws Exception {
+    LinearHashingTable linearHashingTable;
+    Random random;
+    List<Long> keys = new ArrayList<Long>();
+    long i = 0;//Long.MIN_VALUE;
+
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (i < MAX_SEED) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
+
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        Collections.sort(keys);
+
+        Iterator<Long> iterator = linearHashingTable.rangeIterator(keys.get(10));
+        for (Long key : keys){
+          if(key<keys.get(10)){
+            continue;
+          }
+          Assert.assertTrue("" + key, iterator.hasNext());
+          Long lhKey = iterator.next();
+          Assert.assertEquals("" + key, key, lhKey);
+        }
+
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (StackOverflowError e) {
+        stackCnt++;
+        //Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
+      }
+    }
   }
 
   private void swap(long[] data, int firstIndex, int secondIndex) {
