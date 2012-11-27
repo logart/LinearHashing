@@ -125,7 +125,7 @@ public class LinearHashingTable implements Iterable<Long> {
           return allocateNewPageAndStore(hash[0], hash[0], key, hash[1], true);
 
         } else {
-          pageToStore = findNextPageInChain(hash[0],hash[1] , chainDisplacement);
+          pageToStore = findNextPageInChain(hash[0], hash[1], chainDisplacement);
         }
       }
     }
@@ -209,23 +209,20 @@ public class LinearHashingTable implements Iterable<Long> {
     if (capacity < minCapacity && level > 0) {
       //TODO make this durable by inventing cool record pool
       final int naturalOrderKey1;
-      final int naturalOrderKey2;
       final int bucketNumberToMerge1;
       final int bucketNumberToMerge2;
       if (next == 0) {
         naturalOrderKey1 = (int) (CHAIN_NUMBER * Math.pow(2, level)) - 2;
-        naturalOrderKey2 = naturalOrderKey1 + 1;
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level);
         bucketNumberToMerge2 = (int) Math.pow(2, level) - 1;
       } else {
         naturalOrderKey1 = 2 * (next - 1);
-        naturalOrderKey2 = naturalOrderKey1 + 1;
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level + 1);
         bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
 //        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
       }
-      loadChainInPool(bucketNumberToMerge1, level+1);
-      loadChainInPool(bucketNumberToMerge2, level+1);
+      loadChainInPool(bucketNumberToMerge1, level + 1);
+      loadChainInPool(bucketNumberToMerge2, level + 1);
 
       primaryIndex.remove(bucketNumberToMerge2);
       file.set(bucketNumberToMerge2, null);
@@ -622,6 +619,7 @@ public class LinearHashingTable implements Iterable<Long> {
     private int pageToUse = 0;
     long[] currentKeys;
     private final long maxValueToIterate;
+    private boolean nextLevel = next > 0;
 
     private RecordIterator() {
       this(Long.MIN_VALUE, Long.MAX_VALUE);
@@ -648,7 +646,7 @@ public class LinearHashingTable implements Iterable<Long> {
     private long[] getNextKeySet() {
       List<Bucket> chain = new ArrayList<Bucket>();
       final int bucketNumber;
-      if (naturalOrderedKeyToProcess < 2 * next && !nextProcessed) {
+      if (nextLevel) {
         bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level + 1);
       } else {
         bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level);
@@ -658,9 +656,8 @@ public class LinearHashingTable implements Iterable<Long> {
       displacement = primaryIndex.getChainDisplacement(bucketNumber);
 
       //load buckets from overflow positions
-      int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
       while (displacement < 253) {
-        pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
+        pageToUse = findNextPageInChain(bucketNumber, nextLevel ? level + 1 : level, displacement);
         int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
         displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
         Bucket bucket = file.get(pageToUse);
@@ -692,8 +689,8 @@ public class LinearHashingTable implements Iterable<Long> {
       naturalOrderedKeyToProcess++;
 
       if (naturalOrderedKeyToProcess >= 2 * next) {
-        nextProcessed = true;
-        naturalOrderedKeyToProcess = next;
+        nextLevel = false;
+        naturalOrderedKeyToProcess = naturalOrderedKeyToProcess / 2;
       }
 
       Arrays.sort(result, 0, result.length);
@@ -773,36 +770,38 @@ public class LinearHashingTable implements Iterable<Long> {
 
   private long[] getKeySet(long currentRecord, boolean nextNaturalOrderedKeyShouldBeUsed, int step) {
     List<Bucket> chain = new ArrayList<Bucket>();
-    boolean nextProcessed = false;
-    int naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(currentRecord, level);
-    if (naturalOrderedKeyToProcess < next) {
-      naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(currentRecord, level + 1);
-    } else {
-      nextProcessed = true;
+    boolean nextLevel = false;
+    int naturalOrderedKey = HashCalculator.calculateNaturalOrderedHash(currentRecord, level);
+    if (naturalOrderedKey < next) {
+      naturalOrderedKey = HashCalculator.calculateNaturalOrderedHash(currentRecord, level + 1);
+      nextLevel = true;
     }
 
     if (nextNaturalOrderedKeyShouldBeUsed) {
-      naturalOrderedKeyToProcess += step;
-      if (naturalOrderedKeyToProcess == 2 * next) {
-        naturalOrderedKeyToProcess = next;
-        nextProcessed = true;
+      naturalOrderedKey += step;
+      if (nextLevel && naturalOrderedKey >= 2 * next && step > 0) {
+        naturalOrderedKey = naturalOrderedKey / 2;
+        nextLevel = false;
+      }
+
+      if (!nextLevel && naturalOrderedKey < next && step < 0) {
+        naturalOrderedKey = naturalOrderedKey * 2 + 1;
+        nextLevel = true;
       }
     }
 
     int bucketNumber;
-    if (naturalOrderedKeyToProcess < 2 * next && !nextProcessed) {
-      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level + 1);
+    if (nextLevel) {
+      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKey, level + 1);
     } else {
-      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level);
+      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKey, level);
     }
-
-    int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
 
     int displacement = primaryIndex.getChainDisplacement(bucketNumber);
 
     //load buckets from overflow positions
     while (displacement < 253) {
-      int pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
+      int pageToUse = findNextPageInChain(bucketNumber, nextLevel ? level + 1 : level, displacement);
       int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
       displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
       Bucket bucket = file.get(pageToUse);

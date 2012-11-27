@@ -18,7 +18,7 @@ import org.junit.Test;
  */
 public class LinearHashingTableTest {
   private static final int KEYS_COUNT = 100000;
-  public static final int MAX_SEED = 100;
+  public static final int MAX_SEED = 10;
 
   @Test
   @Ignore // not uniformly distributed data is not allowed while statistic was not implemented
@@ -489,7 +489,7 @@ public class LinearHashingTableTest {
 
         //test finding is unsuccessful
         for (Long key : keys){
-          Long lhKey = linearHashingTable.prevRecord(key - 1);
+          Long lhKey = linearHashingTable.prevRecord(key + 1);
           Assert.assertEquals("" + key, key, lhKey);
         }
 
