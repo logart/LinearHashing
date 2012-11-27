@@ -2,6 +2,7 @@ package lh;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -70,9 +71,6 @@ public class LinearHashingTableTest {
 
       } catch (GroupOverflowException e) {
         groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
-      } catch (StackOverflowError e) {
-        stackCnt++;
-        //Do nothing. This exception should occurs on non uniform distributed data.
       } catch (Throwable e) {
         e.printStackTrace();
         break;
@@ -298,9 +296,6 @@ public class LinearHashingTableTest {
         }
       } catch (GroupOverflowException e) {
         groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
-      } catch (StackOverflowError e) {
-        stackCnt++;
-        //Do nothing. This exception should occurs on non uniform distributed data.
       } catch (Throwable e) {
         e.printStackTrace();
         break;
@@ -351,9 +346,162 @@ public class LinearHashingTableTest {
 
       } catch (GroupOverflowException e) {
         groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
-      } catch (StackOverflowError e) {
-        stackCnt++;
-        //Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
+      }
+    }
+  }
+
+  @Test
+  public void testNextHaveRightOrderUsingNextMethod() throws Exception {
+    LinearHashingTable linearHashingTable;
+    Random random;
+    List<Long> keys = new ArrayList<Long>();
+    long i = 0;
+
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (i < MAX_SEED) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
+
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        Collections.sort(keys);
+
+        //test finding is unsuccessful
+        for (Long key : keys){
+          Long lhKey = linearHashingTable.nextRecord(key - 1);
+          Assert.assertEquals("" + key, key, lhKey);
+        }
+
+        //test finding is successful
+        for (int j = 0, keysSize = keys.size()-1; j < keysSize; j++){
+          Long key = keys.get(j);
+          Long lhKey = linearHashingTable.nextRecord(key);
+          Assert.assertEquals("" + j,  keys.get(j+1), lhKey);
+        }
+
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
+      }
+    }
+  }
+
+  @Test
+  public void testNextWithRandomIdGeneration() throws Exception {
+    LinearHashingTable linearHashingTable;
+    Random random;
+    List<Long> keys = new ArrayList<Long>();
+    long i = 0;//Long.MIN_VALUE;
+
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (i < MAX_SEED) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
+
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        long currentRecord = random.nextLong();
+        long nextRecord = linearHashingTable.nextRecord(currentRecord);
+        long prevRecord = linearHashingTable.prevRecord(currentRecord);
+        Assert.assertTrue(prevRecord <= currentRecord);
+        Assert.assertTrue(currentRecord <= nextRecord);
+        Assert.assertEquals(nextRecord, linearHashingTable.nextRecord(prevRecord));
+        Assert.assertEquals(prevRecord, linearHashingTable.prevRecord(nextRecord));
+
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
+      } catch (Throwable e) {
+        e.printStackTrace();
+        break;
+      } finally {
+        i++;
+        System.out.println(
+            "i = " + i + " % " + ((100.0 * (stackCnt + groupCnt)) / i) + "(" + stackCnt + "+" + groupCnt + "/" + i + ")"
+        );
+      }
+    }
+  }
+
+  @Test
+  public void testNextHaveRightOrderUsingPrevMethod() throws Exception {
+    LinearHashingTable linearHashingTable;
+    Random random;
+    List<Long> keys = new ArrayList<Long>();
+    long i = 0;
+
+    int stackCnt = 0;
+    int groupCnt = 0;
+    while (i < MAX_SEED) {
+      try {
+        linearHashingTable = new LinearHashingTable();
+        random = new Random(i);
+        keys.clear();
+
+        while (keys.size() < KEYS_COUNT) {
+          long key = random.nextLong();
+
+          if (linearHashingTable.put(key)) {
+            keys.add(key);
+            Assert.assertTrue("key " + key, linearHashingTable.contains(key));
+          }
+        }
+
+        Collections.sort(keys, new Comparator<Long>() {
+          public int compare(Long o1, Long o2) {
+            return -o1.compareTo(o2);
+          }
+        });
+
+        //test finding is unsuccessful
+        for (Long key : keys){
+          Long lhKey = linearHashingTable.prevRecord(key - 1);
+          Assert.assertEquals("" + key, key, lhKey);
+        }
+
+        //test finding is successful
+        for (int j = 0, keysSize = keys.size()-1; j < keysSize; j++){
+          Long key = keys.get(j);
+          Long lhKey = linearHashingTable.prevRecord(key);
+          Assert.assertEquals("" + key,  keys.get(j+1), lhKey);
+        }
+
+      } catch (GroupOverflowException e) {
+        groupCnt++;//Do nothing. This exception should occurs on non uniform distributed data.
       } catch (Throwable e) {
         e.printStackTrace();
         break;

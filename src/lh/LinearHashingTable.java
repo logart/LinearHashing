@@ -58,9 +58,9 @@ public class LinearHashingTable implements Iterable<Long> {
   }
 
   public boolean put(long key) {
-    int bucketNumber = calculateHash(key);
+    int[] hash = calculateHash(key);
 
-    final boolean result = tryInsertIntoChain(bucketNumber, key);
+    final boolean result = tryInsertIntoChain(hash, key);
     if (result) {
       size++;
     }
@@ -69,26 +69,20 @@ public class LinearHashingTable implements Iterable<Long> {
     return result;
   }
 
-  private int currentLevel(int naturalOrderedKey) {
-    if (naturalOrderedKey < next || naturalOrderedKey > Math.pow(2, level)) {
-      return level + 1;
-    } else {
-      return level;
-    }
-  }
-
-  private int calculateHash(long key) {
+  private int[] calculateHash(long key) {
     int internalHash = HashCalculator.calculateNaturalOrderedHash(key, level);
 
     final int bucketNumber;
+    final int currentLevel;
     if (internalHash < next) {
       bucketNumber = calculateNextHash(key);
+      currentLevel = level + 1;
     } else {
       bucketNumber = HashCalculator.calculateBucketNumber(internalHash, level);
+      currentLevel = level;
     }
 
-
-    return bucketNumber;
+    return new int[]{bucketNumber, currentLevel};
   }
 
   private int calculateNextHash(long key) {
@@ -97,30 +91,30 @@ public class LinearHashingTable implements Iterable<Long> {
 
   }
 
-  private boolean tryInsertIntoChain(final int bucketNumber, long key) {
-    int chainDisplacement = primaryIndex.getChainDisplacement(bucketNumber);
+  private boolean tryInsertIntoChain(final int[] hash, long key) {
+    int chainDisplacement = primaryIndex.getChainDisplacement(hash[0]);
 
     //try to store record in main bucket
     int pageToStore;
     final int keySignature;
 
     if (chainDisplacement > 253) {
-      return storeRecordInMainBucket(bucketNumber, key);
+      return storeRecordInMainBucket(hash[0], key);
     } else {
-      int chainSignature = primaryIndex.getChainSignature(bucketNumber);
+      int chainSignature = primaryIndex.getChainSignature(hash[0]);
       keySignature = LinearHashingTableHelper.calculateSignature(key);
       if (keySignature < chainSignature) {
-        moveLargestRecordToRecordPool(bucketNumber, (byte) chainSignature);
-        final boolean result = storeRecordInMainBucket(bucketNumber, key);
+        moveLargestRecordToRecordPool(hash[0], (byte) chainSignature);
+        final boolean result = storeRecordInMainBucket(hash[0], key);
         storeRecordFromRecordPool();
         return result;
       } else if (keySignature == chainSignature) {
         recordPool.add(key);
         size--;
-        moveLargestRecordToRecordPool(bucketNumber, (byte) chainSignature);
-        Bucket bucket = file.get(bucketNumber);
+        moveLargestRecordToRecordPool(hash[0], (byte) chainSignature);
+        Bucket bucket = file.get(hash[0]);
 
-        primaryIndex.updateSignature(bucketNumber, bucket.keys, bucket.size);
+        primaryIndex.updateSignature(hash[0], bucket.keys, bucket.size);
 
         storeRecordFromRecordPool();
         return true;
@@ -128,10 +122,10 @@ public class LinearHashingTable implements Iterable<Long> {
         if (chainDisplacement == 253) {
           //allocate new page
 
-          return allocateNewPageAndStore(bucketNumber, bucketNumber, key, true);
+          return allocateNewPageAndStore(hash[0], hash[0], key, hash[1], true);
 
         } else {
-          pageToStore = findNextPageInChain(bucketNumber, HashCalculator.calculateNaturalOrderedHash(key, level), chainDisplacement);
+          pageToStore = findNextPageInChain(hash[0],hash[1] , chainDisplacement);
         }
       }
     }
@@ -163,9 +157,9 @@ public class LinearHashingTable implements Iterable<Long> {
         } else {
           if (chainDisplacement == 253) {
             //allocate new page
-            return allocateNewPageAndStore(bucketNumber, pageToStore, key, false);
+            return allocateNewPageAndStore(hash[0], pageToStore, key, hash[1], false);
           } else {
-            pageToStore = findNextPageInChain(bucketNumber, HashCalculator.calculateNaturalOrderedHash(key, level), chainDisplacement);
+            pageToStore = findNextPageInChain(hash[0], hash[1], chainDisplacement);
           }
         }
       }
@@ -178,7 +172,7 @@ public class LinearHashingTable implements Iterable<Long> {
     if (capacity > maxCapacity) {
       int bucketNumberToSplit = HashCalculator.calculateBucketNumber(next, level);
       //TODO make this durable by inventing cool record pool
-      loadChainInPool(bucketNumberToSplit, next);
+      loadChainInPool(bucketNumberToSplit, level);
       int pageToStore = next + (int) Math.pow(2, level);
       int groupSize = calculateGroupSize(level + 1);
       boolean needMove = false;
@@ -212,7 +206,7 @@ public class LinearHashingTable implements Iterable<Long> {
   private void mergeBucketIfNeeded() {
     //calculate load factor
     double capacity = ((double) size) / (primaryIndex.bucketCount() * Bucket.BUCKET_MAX_SIZE);
-    if (capacity < minCapacity) {
+    if (capacity < minCapacity && level > 0) {
       //TODO make this durable by inventing cool record pool
       final int naturalOrderKey1;
       final int naturalOrderKey2;
@@ -230,8 +224,8 @@ public class LinearHashingTable implements Iterable<Long> {
         bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
 //        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
       }
-      loadChainInPool(bucketNumberToMerge1, naturalOrderKey1);
-      loadChainInPool(bucketNumberToMerge2, naturalOrderKey2);
+      loadChainInPool(bucketNumberToMerge1, level+1);
+      loadChainInPool(bucketNumberToMerge2, level+1);
 
       primaryIndex.remove(bucketNumberToMerge2);
       file.set(bucketNumberToMerge2, null);
@@ -278,7 +272,7 @@ public class LinearHashingTable implements Iterable<Long> {
     }
   }
 
-  private void loadChainInPool(final int bucketNumber, final int naturalOrderedKey) {
+  private void loadChainInPool(final int bucketNumber, final int currentLevel) {
     Collection<? extends Long> content = file.get(bucketNumber).getContent();
     size -= content.size();
     recordPool.addAll(content);
@@ -288,7 +282,7 @@ public class LinearHashingTable implements Iterable<Long> {
     int pageToUse;
 
     while (displacement < 253) {
-      pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
+      pageToUse = findNextPageInChain(bucketNumber, currentLevel, displacement);
 
       content = file.get(pageToUse).getContent();
       size -= content.size();
@@ -327,8 +321,8 @@ public class LinearHashingTable implements Iterable<Long> {
     size -= largestRecords.size();
   }
 
-  private int findNextPageInChain(int bucketNumber, int naturalOrderedKey, int chainDisplacement) {
-    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(naturalOrderedKey));
+  private int findNextPageInChain(int bucketNumber, int currentLevel, int chainDisplacement) {
+    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel);
     int startingPage = groupOverflowTable.getPageForGroup(groupNumber);
     if (startingPage == -1) {
 //            System.out.println("groupNumber " + groupNumber);
@@ -338,10 +332,10 @@ public class LinearHashingTable implements Iterable<Long> {
     return startingPage + chainDisplacement;
   }
 
-  private boolean allocateNewPageAndStore(int bucketNumber, int pageToStore, long key, boolean mainChain) {
+  private boolean allocateNewPageAndStore(int bucketNumber, int pageToStore, long key, int currentLevel, boolean mainChain) {
     //todo review this level very carefully
     int groupSize = calculateGroupSize(level);
-    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(HashCalculator.calculateNaturalOrderedHash(key, level)));
+    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel);
 
     int[] pos = groupOverflowTable.searchForGroupOrCreate(groupNumber, groupSize);
 
@@ -459,14 +453,14 @@ public class LinearHashingTable implements Iterable<Long> {
   }
 
   public boolean contains(long key) {
-    final int bucketNumber = calculateHash(key);
+    final int[] hash = calculateHash(key);
 
     int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
-    int signature = primaryIndex.getChainSignature(bucketNumber);
-    int pageNumberToUse = bucketNumber;
+    int signature = primaryIndex.getChainSignature(hash[0]);
+    int pageNumberToUse = hash[0];
 
-    int chainDisplacement = primaryIndex.getChainDisplacement(bucketNumber);
-    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(HashCalculator.calculateNaturalOrderedHash(key, level)));
+    int chainDisplacement = primaryIndex.getChainDisplacement(hash[0]);
+    byte groupNumber = calculateGroupNumber(hash[0], hash[1]);
     int pageNumber = groupOverflowTable.getPageForGroup(groupNumber);
 
     while (true) {
@@ -488,17 +482,17 @@ public class LinearHashingTable implements Iterable<Long> {
   }
 
   public boolean delete(long key) {
-    final int bucketNumber = calculateHash(key);
+    final int[] hash = calculateHash(key);
 
     int keySignature = LinearHashingTableHelper.calculateSignature(key) & 0xFF;
-    int signature = primaryIndex.getChainSignature(bucketNumber);
-    int pageNumberToUse = bucketNumber;
+    int signature = primaryIndex.getChainSignature(hash[0]);
+    int pageNumberToUse = hash[0];
 
-    int chainDisplacement = primaryIndex.getChainDisplacement(bucketNumber);
-    byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel(HashCalculator.calculateNaturalOrderedHash(key, level)));
+    int chainDisplacement = primaryIndex.getChainDisplacement(hash[0]);
+    byte groupNumber = calculateGroupNumber(hash[0], hash[1]);
     int pageNumber = groupOverflowTable.getPageForGroup(groupNumber);
 
-    int prevPage = bucketNumber;
+    int prevPage = hash[0];
     while (true) {
       if (keySignature > signature) {
         if (chainDisplacement >= 253) {
@@ -536,15 +530,15 @@ public class LinearHashingTable implements Iterable<Long> {
             }
 
             //update signatures after removing some records from buckets
-            if (prevPage == bucketNumber) {
-              if (primaryIndex.getChainDisplacement(bucketNumber) > 253) {
-                primaryIndex.updateSignature(bucketNumber, 255);
+            if (prevPage == hash[0]) {
+              if (primaryIndex.getChainDisplacement(hash[0]) > 253) {
+                primaryIndex.updateSignature(hash[0], 255);
               } else {
-                primaryIndex.updateSignature(bucketNumber, bucket.keys, bucket.size);
+                primaryIndex.updateSignature(hash[0], bucket.keys, bucket.size);
               }
             } else {
               int indexPosition = pageIndicator.getRealPosInSecondaryIndex(prevPage);
-              if (primaryIndex.getChainDisplacement(bucketNumber) > 253) {
+              if (primaryIndex.getChainDisplacement(hash[0]) > 253) {
                 secondaryIndex.updateSignature(indexPosition, 255);
               } else {
                 secondaryIndex.updateSignature(indexPosition, bucket.keys, bucket.size);
@@ -554,13 +548,13 @@ public class LinearHashingTable implements Iterable<Long> {
           }
 
           //update displacement and signature in last bucket
-          if (pageNumberToUse == bucketNumber) {
+          if (pageNumberToUse == hash[0]) {
             //main bucket does not have overflow chain
-            int displacement = primaryIndex.decrementDisplacement(bucketNumber, bucket.size);
+            int displacement = primaryIndex.decrementDisplacement(hash[0], bucket.size);
             if (displacement <= 253) {
-              primaryIndex.updateSignature(bucketNumber, bucket.keys, bucket.size);
+              primaryIndex.updateSignature(hash[0], bucket.keys, bucket.size);
             } else {
-              primaryIndex.updateSignature(bucketNumber, 255);
+              primaryIndex.updateSignature(hash[0], 255);
             }
           } else {
             int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageNumberToUse);
@@ -568,10 +562,10 @@ public class LinearHashingTable implements Iterable<Long> {
               secondaryIndex.remove(realPosInSecondaryIndex);
               pageIndicator.unset(pageNumberToUse);
               //set prev bucket in chain correct displacement
-              if (prevPage == bucketNumber) {
-                int displacement = primaryIndex.decrementDisplacement(bucketNumber, file.get(bucketNumber).size, true);
+              if (prevPage == hash[0]) {
+                int displacement = primaryIndex.decrementDisplacement(hash[0], file.get(hash[0]).size, true);
                 if (displacement > 253) {
-                  primaryIndex.updateSignature(bucketNumber, 255);
+                  primaryIndex.updateSignature(hash[0], 255);
                 }
               } else {
                 int prevIndexPosition = pageIndicator.getRealPosInSecondaryIndex(prevPage);
@@ -642,11 +636,11 @@ public class LinearHashingTable implements Iterable<Long> {
       naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level);
       if (naturalOrderedKeyToProcess < next) {
         naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(minValueFromIterate, level + 1);
-      } else{
+      } else {
         nextProcessed = true;
       }
       currentKeys = getNextKeySet();
-      while(currentKeys[positionInCurrentBucket]<minValueFromIterate){
+      while (currentKeys[positionInCurrentBucket] < minValueFromIterate) {
         positionInCurrentBucket++;
       }
     }
@@ -664,8 +658,8 @@ public class LinearHashingTable implements Iterable<Long> {
       displacement = primaryIndex.getChainDisplacement(bucketNumber);
 
       //load buckets from overflow positions
+      int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
       while (displacement < 253) {
-        int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
         pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
         int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
         displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
@@ -735,5 +729,106 @@ public class LinearHashingTable implements Iterable<Long> {
     public void remove() {
       throw new NotImplementedException();
     }
+  }
+
+  public long nextRecord(long currentRecord) {
+    return nextRecord(currentRecord, false, +1);
+  }
+
+  private long nextRecord(long currentRecord, boolean nextNaturalOrderedKeyShouldBeUsed, int step) {
+    final long[] result = getKeySet(currentRecord, nextNaturalOrderedKeyShouldBeUsed, step);
+
+    Arrays.sort(result);
+    int recordPosition = Arrays.binarySearch(result, currentRecord);
+    if (recordPosition >= 0 || recordPosition < -result.length) {
+      if (recordPosition == result.length - 1 || recordPosition < -result.length) {
+        return nextRecord(currentRecord, true, +1);
+      } else {
+        return result[recordPosition + 1];
+      }
+    } else {
+      return result[-(recordPosition + 1)];
+    }
+  }
+
+  public long prevRecord(long currentRecord) {
+    return prevRecord(currentRecord, false, -1);
+  }
+
+  private long prevRecord(long currentRecord, boolean nextNaturalOrderedKeyShouldBeUsed, int step) {
+    final long[] result = getKeySet(currentRecord, nextNaturalOrderedKeyShouldBeUsed, step);
+
+    Arrays.sort(result);
+    int recordPosition = Arrays.binarySearch(result, currentRecord);
+    if (recordPosition >= 0 || recordPosition == -1) {
+      if (recordPosition == 0 || recordPosition == -1) {
+        return prevRecord(currentRecord, true, -1);
+      } else {
+        return result[recordPosition - 1];
+      }
+    } else {
+      return result[-(recordPosition + 2)];
+    }
+  }
+
+  private long[] getKeySet(long currentRecord, boolean nextNaturalOrderedKeyShouldBeUsed, int step) {
+    List<Bucket> chain = new ArrayList<Bucket>();
+    boolean nextProcessed = false;
+    int naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(currentRecord, level);
+    if (naturalOrderedKeyToProcess < next) {
+      naturalOrderedKeyToProcess = HashCalculator.calculateNaturalOrderedHash(currentRecord, level + 1);
+    } else {
+      nextProcessed = true;
+    }
+
+    if (nextNaturalOrderedKeyShouldBeUsed) {
+      naturalOrderedKeyToProcess += step;
+      if (naturalOrderedKeyToProcess == 2 * next) {
+        naturalOrderedKeyToProcess = next;
+        nextProcessed = true;
+      }
+    }
+
+    int bucketNumber;
+    if (naturalOrderedKeyToProcess < 2 * next && !nextProcessed) {
+      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level + 1);
+    } else {
+      bucketNumber = HashCalculator.calculateBucketNumber(naturalOrderedKeyToProcess, level);
+    }
+
+    int naturalOrderedKey = nextProcessed ? naturalOrderedKeyToProcess : naturalOrderedKeyToProcess / 2;
+
+    int displacement = primaryIndex.getChainDisplacement(bucketNumber);
+
+    //load buckets from overflow positions
+    while (displacement < 253) {
+      int pageToUse = findNextPageInChain(bucketNumber, naturalOrderedKey, displacement);
+      int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
+      displacement = secondaryIndex.getChainDisplacement(realPosInSecondaryIndex);
+      Bucket bucket = file.get(pageToUse);
+      chain.add(bucket);
+    }
+
+    Bucket bucket = file.get(bucketNumber);
+    final long[] result;
+    if (chain.size() == 0) {
+      result = new long[bucket.size];
+      System.arraycopy(bucket.keys, 0, result, 0, bucket.size);
+    } else {
+      chain.add(bucket);
+
+      int amountOfRecords = 0;
+      for (Bucket chainElement : chain){
+        amountOfRecords += chainElement.size;
+      }
+
+      result = new long[amountOfRecords];
+      int freePositionInArrayPointer = 0;
+      for (Bucket chainElement : chain){
+        System.arraycopy(chainElement.keys, 0, result, freePositionInArrayPointer, chainElement.size);
+        freePositionInArrayPointer += chainElement.size;
+      }
+    }
+    return result;
   }
 }
