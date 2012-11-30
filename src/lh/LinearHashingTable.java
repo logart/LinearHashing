@@ -47,11 +47,8 @@ public class LinearHashingTable implements Iterable<Long> {
     pageIndicator = new PageIndicator();
 
     file = new ArrayList<Bucket>(FILE_SIZE);
-    for (int i = 0; i < FILE_SIZE; ++i){
-      file.add(null);
-    }
 
-    file.set(0, new Bucket());
+    file.add(new Bucket());
 
     primaryIndex.addNewPosition();
 
@@ -190,6 +187,9 @@ public class LinearHashingTable implements Iterable<Long> {
 
       //TODO review
       primaryIndex.addNewPosition(pageToStore);
+      while(file.size()<pageToStore+1){
+        file.add(null);
+      }
       file.set(pageToStore, new Bucket());
       groupOverflowTable.moveDummyGroupIfNeeded(pageToStore, groupSize);
 
@@ -211,18 +211,21 @@ public class LinearHashingTable implements Iterable<Long> {
       final int naturalOrderKey1;
       final int bucketNumberToMerge1;
       final int bucketNumberToMerge2;
+      final int currentLevel;
       if (next == 0) {
+        currentLevel = level;
         naturalOrderKey1 = (int) (CHAIN_NUMBER * Math.pow(2, level)) - 2;
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level);
         bucketNumberToMerge2 = (int) Math.pow(2, level) - 1;
       } else {
+        currentLevel = level+1;
         naturalOrderKey1 = 2 * (next - 1);
         bucketNumberToMerge1 = HashCalculator.calculateBucketNumber(naturalOrderKey1, level + 1);
         bucketNumberToMerge2 = next - 1 + (int) Math.pow(2, level);
 //        assert HashCalculator.calculateBucketNumber(2 * naturalOrderKey2 - 1, level + 1) == next - 1 + (int) Math.pow(2, level);
       }
-      loadChainInPool(bucketNumberToMerge1, level + 1);
-      loadChainInPool(bucketNumberToMerge2, level + 1);
+      loadChainInPool(bucketNumberToMerge1, currentLevel);
+      loadChainInPool(bucketNumberToMerge2, currentLevel);
 
       primaryIndex.remove(bucketNumberToMerge2);
       file.set(bucketNumberToMerge2, null);
@@ -252,11 +255,13 @@ public class LinearHashingTable implements Iterable<Long> {
   }
 
   private void moveGroupToNewPosition(int oldPage, int newPage, int groupSize) {
+    while(file.size()<newPage + groupSize + 1){
+      file.add(null);
+    }
     for (int i = oldPage; i < oldPage + groupSize; ++i){
       if (pageIndicator.get(i)) {
         Bucket bucket = file.get(i);
         file.set(i - oldPage + newPage, bucket);
-//                    System.out.println("null page " + i + " but size is " + primaryIndex.bucketCount());
         file.set(i, null);
         //move resords in secondary index
         int oldPositionInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(i);
@@ -301,8 +306,7 @@ public class LinearHashingTable implements Iterable<Long> {
 
   private void storeRecordFromRecordPool() {
     while (!recordPool.isEmpty()) {
-      Long key = recordPool.get(0);
-      recordPool.remove(key);
+      Long key = recordPool.remove(0);
 
       //TODO be sure that key successfully stored
       if (!put(key)) {
@@ -322,8 +326,6 @@ public class LinearHashingTable implements Iterable<Long> {
     byte groupNumber = calculateGroupNumber(bucketNumber, currentLevel);
     int startingPage = groupOverflowTable.getPageForGroup(groupNumber);
     if (startingPage == -1) {
-//            System.out.println("groupNumber " + groupNumber);
-//            System.out.println(groupOverflowTable);
       return -1;
     }
     return startingPage + chainDisplacement;
@@ -369,8 +371,10 @@ public class LinearHashingTable implements Iterable<Long> {
     int realPosInSecondaryIndex = pageIndicator.getRealPosInSecondaryIndex(pageToUse);
     secondaryIndex.addNewPosition(realPosInSecondaryIndex);
     Bucket bucket = new Bucket();
+    while(file.size()<pageToUse+1){
+      file.add(null);
+    }
     file.set(pageToUse, bucket);
-
 
     return storeRecordInOverflowBucket(pageToUse, key);
   }
@@ -734,6 +738,10 @@ public class LinearHashingTable implements Iterable<Long> {
 
   private long nextRecord(long currentRecord, boolean nextNaturalOrderedKeyShouldBeUsed, int step) {
     final long[] result = getKeySet(currentRecord, nextNaturalOrderedKeyShouldBeUsed, step);
+
+    if (result.length == 0) {
+      return -1;
+    }
 
     Arrays.sort(result);
     int recordPosition = Arrays.binarySearch(result, currentRecord);
